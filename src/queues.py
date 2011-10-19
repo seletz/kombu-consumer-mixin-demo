@@ -29,13 +29,4 @@ from kombu import Queue
 announce_exchange = Exchange("announce", type="topic")
 announce_queues   = [Queue("announce", announce_exchange, routing_key="announce")]
 
-def slave_queue_name(job):
-    #return "slave"
-    return "slave-%s" % job["job-id"]
-
-def slave_routing_key(job):
-    #return "slave"
-    return "slave.%s" % job["job-id"]
-
-
 # vim: set ft=python ts=4 sw=4 expandtab :

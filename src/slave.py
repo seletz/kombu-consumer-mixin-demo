@@ -27,35 +27,39 @@ import logging
 
 from kombu import BrokerConnection
 from kombu import Queue
-from kombu.utils import debug
 from kombu.mixins import ConsumerMixin
 
+from base import setup_logging
+from base import WorkerBase
 from queues import announce_exchange
-from queues import slave_queue_name
-from queues import slave_routing_key
 
 logger = logging.getLogger("slave")
 
-class Slave(ConsumerMixin):
-    def __init__(self, connection, job):
-        logger.info("Slave.__init__: connection=%r" % connection)
-        self.connection = connection
-        self.job = job
+class Slave(WorkerBase, ConsumerMixin):
+    def __init__(self, connection, job, queue_name, routing_key):
+        logger.info("Slave.__init__: connection=%r job=%r queue_name=%s routing_key=%s" %
+                (connection, job, queue_name, routing_key))
+        self.connection  = connection
+        self.job         = job
+        self.queue_name  = queue_name
+        self.routing_key = routing_key
+
+        self.logger = logger
 
     def get_consumers(self, Consumer, channel):
         queues = [
                 Queue(
-                    slave_queue_name(self.job),
+                    self.queue_name,
                     announce_exchange,
-                    routing_key=slave_routing_key(self.job),
+                    routing_key=self.routing_key,
                     auto_delete=True
                     )
                 ]
         return [Consumer(queues=queues, callbacks=[self.process_message])]
 
     def process_message(self, body, message):
-        logger.debug("Slave.process_message: message=%r" % message)
-        logger.debug("Slave.process_message: body   =%r" % body)
+        logger.info("Slave.process_message: message=%r" % message)
+        logger.info("Slave.process_message: body   =%r" % body)
 
         command = body.get("command", "print")
         logger.info("Slave: COMMAND %s" % command)
@@ -69,16 +73,16 @@ class Slave(ConsumerMixin):
 
         message.ack()
 
-def start_new_slave(job):
-    logging.basicConfig(level=logging.INFO)
-    debug.setup_logging(logging.INFO)
+def start_new_slave(job, queue_name, routing_key):
+    setup_logging(level=logging.DEBUG)
     logger.info("Slave: start_new_slave: job=%r" % job)
     with BrokerConnection("amqp://guest:guest@localhost:5672//") as conn:
-        Slave(conn, job).run()
+        Slave(conn, job, queue_name, routing_key).run()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
-    #debug.setup_logging(logging.INFO)
+    setup_logging(level=logging.DEBUG)
+    start_new_slave({}, "slave-1", "slave-1")
+
 
 # vim: set ft=python ts=4 sw=4 expandtab :
