@@ -23,7 +23,7 @@ from __future__ import with_statement
 __author__    = """Stefan Eletzhofer <se@nexiles.de>"""
 __docformat__ = 'plaintext'
 
-import uuid
+import sys
 import time
 import logging
 
@@ -38,22 +38,43 @@ from queues import announce_exchange
 logger = logging.getLogger("client")
 
 def publish_job(job, routing_key="announce"):
-    logger.info("PUBLISH: %s route %s" % (job, routing_key))
     with BrokerConnection("amqp://guest:guest@localhost:5672//") as conn:
         with producers[conn].acquire(block=True) as producer:
             maybe_declare(announce_exchange, producer.channel)
-            producer.publish(job, serializer="json",
-                                      compression="zlib",
-                                      routing_key=routing_key)
+            if job.get("command", None) == "flood":
+                job["command"] = "print"
+                for x in range(100):
+                    job["sequence"] = x
+                    producer.publish(job, serializer="json", routing_key=routing_key)
+                    logger.info("PUBLISH: %s route %s" % (job, routing_key))
+            else:
+                producer.publish(job, serializer="json", routing_key=routing_key)
+                logger.info("PUBLISH: %s route %s" % (job, routing_key))
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     debug.setup_logging(logging.DEBUG)
-    payload = {"message": "Hello World", "job-id": str(time.time())}
-    publish_job(payload)
 
+    if len(sys.argv) == 1:
+        payload = {"message": "Hello World", "command": "new-slave", "job-id": str(time.time())}
+        publish_job(payload)
+        sys.exit(0)
 
+    command = "print"
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
 
+    routing_key = "announce"
+    if len(sys.argv) > 2:
+        routing_key = sys.argv[2]
 
+    arg = None
+    if len(sys.argv) > 3:
+        arg = sys.argv[3]
+
+    job = dict(message="Hello World", command=command)
+    if arg:
+        job["argument"] = arg
+    publish_job(job, routing_key)
 
 # vim: set ft=python ts=4 sw=4 expandtab :
