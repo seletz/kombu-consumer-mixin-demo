@@ -2,8 +2,9 @@
 Projekt: Kombu Consumer Mixin Research
 ======================================
 
-:Author: Stefan Eletzhofer
-:Date:   2011-10-19
+:Author:  Stefan Eletzhofer
+:Date:    2011-10-19
+:Version: 0.1
 
 Abstract
 ========
