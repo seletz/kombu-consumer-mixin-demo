@@ -27,14 +27,15 @@ import logging
 
 from kombu import BrokerConnection
 from kombu import Queue
-from kombu.utils import debug
 from kombu.mixins import ConsumerMixin
 
+from base import setup_logging
+from base import WorkerBase
 from queues import announce_exchange
 
 logger = logging.getLogger("slave")
 
-class Slave(ConsumerMixin):
+class Slave(WorkerBase, ConsumerMixin):
     def __init__(self, connection, job, queue_name, routing_key):
         logger.info("Slave.__init__: connection=%r job=%r queue_name=%s routing_key=%s" %
                 (connection, job, queue_name, routing_key))
@@ -42,6 +43,8 @@ class Slave(ConsumerMixin):
         self.job         = job
         self.queue_name  = queue_name
         self.routing_key = routing_key
+
+        self.logger = logger
 
     def get_consumers(self, Consumer, channel):
         queues = [
@@ -71,17 +74,14 @@ class Slave(ConsumerMixin):
         message.ack()
 
 def start_new_slave(job, queue_name, routing_key):
-    logging.basicConfig(level=logging.INFO)
-    debug.setup_logging(logging.INFO)
+    setup_logging(level=logging.DEBUG)
     logger.info("Slave: start_new_slave: job=%r" % job)
     with BrokerConnection("amqp://guest:guest@localhost:5672//") as conn:
         Slave(conn, job, queue_name, routing_key).run()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
-    #debug.setup_logging(logging.INFO)
-
+    setup_logging(level=logging.DEBUG)
     start_new_slave({}, "slave-1", "slave-1")
 
 

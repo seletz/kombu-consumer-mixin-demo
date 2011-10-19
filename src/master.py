@@ -29,11 +29,14 @@ import logging
 from multiprocessing import Process
 
 from kombu import BrokerConnection
+from kombu import messaging
 from kombu.common import maybe_declare
 from kombu.pools import producers
 from kombu.utils import debug
 from kombu.mixins import ConsumerMixin
 
+from base import WorkerBase
+from base import setup_logging
 from queues import announce_queues
 from queues import announce_exchange
 from slave import start_new_slave
@@ -42,11 +45,11 @@ logger = logging.getLogger("master")
 
 def publish_job(connection, job, routing_key):
     logger.info("PUBLISH: %r -> %s" % (job, routing_key))
-    with producers[connection].acquire(block=True) as producer:
+    with producers[connection].acquire(block=True, timeout=1) as producer:
         maybe_declare(announce_exchange, producer.channel)
         producer.publish(job, serializer="json", routing_key=routing_key)
 
-class Master(ConsumerMixin):
+class Master(WorkerBase, ConsumerMixin):
 
     def __init__(self, connection):
         logger.info("Master.__init__: connection=%r" % connection)
@@ -55,12 +58,22 @@ class Master(ConsumerMixin):
         self.slaves = []
         self._slave_id = 0
 
+        self.logger = logger
+
     def get_consumers(self, Consumer, channel):
         return [Consumer(queues=announce_queues,
                         callbacks=[self.process_message])]
 
+    def on_consume_ready(self, connection, channel, **kwargs):
+        self.info("Master:on_consume_ready: %r %r %r", connection, channel, kwargs)
+        self.producer = messaging.Producer(
+                        channel,
+                        announce_exchange,
+                        serializer="json"
+                )
+
     def publish(self, job, routing_key):
-        publish_job(self.connection, job, routing_key)
+        self.producer.publish(job, routing_key=routing_key)
 
     def broadcast_slaves(self, message):
         logger.info("Master.broadcast_slaves: message=%r" % message)
@@ -128,8 +141,7 @@ def command_stop():
         publish_job(conn, dict(command="cancel"), "announce")
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    debug.setup_logging(logging.INFO)
+    setup_logging(logging.INFO)
 
     command = "start"
     if len(sys.argv) > 1:
